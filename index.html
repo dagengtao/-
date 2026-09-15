@@ -8,7 +8,7 @@
 <!-- PWA 配置 -->
 <link rel="manifest" href="./manifest.json">
 <meta name="theme-color" content="#007AFF">
-<link rel="apple-touch-icon" href="./icon.svg">
+<link rel="apple-touch-icon" href="./android-chrome-192x192.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
@@ -95,7 +95,6 @@ h1{font-size:30px;font-weight:700;letter-spacing:-.6px;margin:0;line-height:1.15
 
 .item-head{display:flex;align-items:center;justify-content:space-between;gap:10px}
 .stock-name{font-size:17px;font-weight:600;letter-spacing:-.2px}
-.stock-code{font-size:13px;color:var(--text2);margin-left:7px;font-variant-numeric:tabular-nums}
 .badge{font-size:11px;font-weight:600;padding:3px 9px;border-radius:20px;white-space:nowrap}
 .badge-blue{background:rgba(0,122,255,.14);color:#007AFF}
 .badge-gray{background:var(--fill);color:var(--text2)}
@@ -475,7 +474,7 @@ function renderPicks(){
     var statusCls = p.status === '买入' ? 'badge-blue' : (p.status === '放弃' ? 'badge-gray' : 'badge-orange');
     return '<div class="card tap" onclick="openPickSheet(\'' + p.id + '\')">' +
       '<div class="item-head">' +
-        '<div><span class="stock-name">' + esc(p.name || '未命名') + '</span><span class="stock-code">' + esc(p.code || '') + '</span></div>' +
+        '<div><span class="stock-name">' + esc(p.name || '未命名') + '</span></div>' +
         '<span class="badge ' + statusCls + '">' + esc(p.status) + '</span>' +
       '</div>' +
       '<div class="date-line">' + esc(p.date) + '</div>' +
@@ -490,7 +489,7 @@ function renderPicks(){
 window.openPickSheet = function(id){
   var ex = id ? S.picks.find(function(p){ return p.id === id; }) : null;
   pickDraft = ex ? JSON.parse(JSON.stringify(ex))
-                 : { id:uid(), date:todayStr(), code:'', name:'', reasons:[{dim:'技术面',text:''}], expect:'', status:'观察' };
+                 : { id:uid(), date:todayStr(), name:'', reasons:[{dim:'技术面',text:''}], expect:'', status:'观察' };
   drawPickSheet();
 };
 
@@ -500,7 +499,6 @@ function drawPickSheet(){
   openSheet(
     '<div class="sheet-title">' + (isNew ? '新建选股' : '编辑选股') + '</div>' +
     '<div class="frow"><label>日期</label><input type="date" id="f-date" value="' + esc(p.date) + '"></div>' +
-    '<div class="frow"><label>代码</label><input id="f-code" value="' + esc(p.code) + '" placeholder="000001" inputmode="numeric"></div>' +
     '<div class="frow"><label>名称</label><input id="f-name" value="' + esc(p.name) + '" placeholder="股票名称"></div>' +
     '<div class="sub-label">分析原因</div>' +
     '<div id="reason-list">' +
@@ -527,7 +525,7 @@ function drawPickSheet(){
     var el = $('#' + id);
     if (el) el.addEventListener('input', function(){ pickDraft[key] = el.value; });
   }
-  bind('f-date','date'); bind('f-code','code'); bind('f-name','name');
+  bind('f-date','date'); bind('f-name','name');
   bind('f-expect','expect'); bind('f-status','status');
   $$('[data-ri]', sh).forEach(function(el){
     var h = function(){ pickDraft.reasons[+el.dataset.ri][el.dataset.rf] = el.value; };
@@ -543,7 +541,7 @@ function drawPickSheet(){
   });
   $('#add-reason').onclick = function(){ pickDraft.reasons.push({ dim:'题材面', text:'' }); drawPickSheet(); };
   $('#f-save').onclick = function(){
-    if (!pickDraft.name.trim() && !pickDraft.code.trim()) return;
+    if (!pickDraft.name.trim()) return;
     var i = S.picks.findIndex(function(x){ return x.id === pickDraft.id; });
     if (i >= 0) S.picks[i] = pickDraft; else S.picks.unshift(pickDraft);
     save(); closeSheet(); render();
@@ -620,7 +618,7 @@ function renderPlanCard(){
     tradeStatus = '<div class="plan-result good">✓ 今日 ' + dayTrades.length + ' 笔交易均在计划内</div>';
   } else {
     tradeStatus = '<div class="plan-result warn">⚠ 今日有 ' + unplanned.length + ' 笔计划外交易：' +
-      esc(unplanned.map(function(t){ return t.name || t.code || '未命名'; }).join('、')) + '</div>';
+      esc(unplanned.map(function(t){ return t.name || '未命名'; }).join('、')) + '</div>';
   }
 
   return '<div class="card">' +
@@ -743,7 +741,7 @@ function tradeCard(t){
   var unplannedBadge = t.inPlan === false ? '<span class="badge badge-orange">计划外</span>' : '';
   return '<div class="card tap" onclick="openTradeSheet(\'' + t.id + '\')">' +
     '<div class="item-head">' +
-      '<div style="min-width:0"><span class="stock-name">' + esc(t.name || t.code || '未命名') + '</span><span class="stock-code">' + esc(t.code || '') + '</span></div>' +
+      '<div style="min-width:0"><span class="stock-name">' + esc(t.name || '未命名') + '</span></div>' +
       '<div style="display:flex;gap:5px;align-items:center;flex-shrink:0">' +
         unplannedBadge +
         '<span class="badge ' + (mode ? 'badge-blue' : 'badge-gray') + '">' + esc(modeName) + '</span>' +
@@ -766,7 +764,7 @@ function tradeCard(t){
 window.openTradeSheet = function(id){
   var ex = id ? S.trades.find(function(t){ return t.id === id; }) : null;
   tradeDraft = ex ? JSON.parse(JSON.stringify(ex))
-                  : { id:uid(), date:todayStr(), code:'', name:'', modeId:(S.modes[0] && S.modes[0].id) || 'outside',
+                  : { id:uid(), date:todayStr(), name:'', modeId:(S.modes[0] && S.modes[0].id) || 'outside',
                       buyPrice:'', sellPrice:'', qty:'', buyReason:'', sellReason:'', inPlan: true };
   if (tradeDraft.inPlan === undefined) tradeDraft.inPlan = true;
   drawTradeSheet();
@@ -781,7 +779,6 @@ function drawTradeSheet(){
   openSheet(
     '<div class="sheet-title">' + (isNew ? '记录交易' : '编辑交易') + '</div>' +
     '<div class="frow"><label>日期</label><input type="date" id="t-date" value="' + esc(t.date) + '"></div>' +
-    '<div class="frow"><label>代码</label><input id="t-code" value="' + esc(t.code) + '" placeholder="000001" inputmode="numeric"></div>' +
     '<div class="frow"><label>名称</label><input id="t-name" value="' + esc(t.name) + '" placeholder="股票名称"></div>' +
     '<div class="frow"><label>计划</label>' +
       '<div class="seg" id="t-inplan" style="flex:1;justify-content:flex-end">' +
@@ -801,7 +798,7 @@ function drawTradeSheet(){
   );
 
   var sh = $('#sheet');
-  var map = { 't-date':'date','t-code':'code','t-name':'name','t-mode':'modeId','t-buy':'buyPrice','t-sell':'sellPrice','t-qty':'qty','t-br':'buyReason','t-sr':'sellReason' };
+  var map = { 't-date':'date','t-name':'name','t-mode':'modeId','t-buy':'buyPrice','t-sell':'sellPrice','t-qty':'qty','t-br':'buyReason','t-sr':'sellReason' };
   Object.keys(map).forEach(function(id){
     var el = $('#' + id);
     var key = map[id];
@@ -830,7 +827,7 @@ function drawTradeSheet(){
   updatePreview();
 
   $('#t-save').onclick = function(){
-    if (!tradeDraft.name.trim() && !tradeDraft.code.trim()) return;
+    if (!tradeDraft.name.trim()) return;
     var i = S.trades.findIndex(function(x){ return x.id === tradeDraft.id; });
     if (i >= 0) S.trades[i] = tradeDraft; else S.trades.unshift(tradeDraft);
     save(); closeSheet(); render();
