@@ -141,6 +141,24 @@ h1{font-size:30px;font-weight:700;letter-spacing:-.6px;margin:0;line-height:1.15
 .plan-result.warn{color:#FF9500;background:rgba(255,149,0,.1)}
 .plan-result.info{color:var(--text2);background:var(--fill)}
 
+/* 交易计划子块 */
+.trade-plan{background:var(--fill);border-radius:11px;padding:11px 12px;margin-top:10px}
+.trade-plan-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;gap:8px}
+.trade-plan-stock{font-size:15px;font-weight:600;letter-spacing:-.2px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.trade-plan-pick{font-size:11px;color:var(--text3);margin-left:6px;font-weight:400}
+.tp-row{display:flex;gap:8px;padding:4px 0;align-items:flex-start}
+.tp-row>label{flex:0 0 36px;color:var(--text2);font-size:12px;padding-top:8px}
+.tp-row input,.tp-row textarea{flex:1;background:var(--card);border-radius:8px;padding:7px 10px;font-size:14px;line-height:1.4}
+.tp-row textarea{min-height:48px;text-align:left}
+.tp-empty{font-size:13px;color:var(--text3);padding:6px 0}
+
+/* 选股选择器 */
+.pick-option{padding:12px 0;border-bottom:.5px solid var(--sep);cursor:pointer;transition:opacity .15s}
+.pick-option:active{opacity:.6}
+.pick-option:last-child{border-bottom:none}
+.pick-option.selected{position:relative}
+.pick-option.selected::after{content:'✓';position:absolute;right:0;top:50%;transform:translateY(-50%);color:var(--accent);font-size:18px;font-weight:600}
+
 .mode-envs{display:flex;flex-wrap:wrap;gap:5px;margin-top:10px}
 .mode-env{font-size:11px;background:rgba(0,122,255,.12);color:#007AFF;padding:3px 9px;border-radius:7px;font-weight:500}
 .mode-top{display:flex;align-items:center;gap:16px;margin-top:12px}
@@ -559,9 +577,10 @@ function drawPickSheet(){
 var planDate = todayStr();
 
 function getPlan(d){
-  if (!S.plans[d]) S.plans[d] = { items: [] };
+  if (!S.plans[d]) S.plans[d] = { items: [], tradePlans: [] };
   var p = S.plans[d];
   if (!Array.isArray(p.items)) p.items = [];
+  if (!Array.isArray(p.tradePlans)) p.tradePlans = [];
   return p;
 }
 
@@ -600,6 +619,63 @@ window.updatePlanText = function(i, v){
   var p = getPlan(planDate);
   if (!p.items[i]) return;
   p.items[i].text = v;
+  saveSoon();
+};
+
+/* 交易计划相关 */
+function openPickSelector(){
+  if (!S.picks.length) {
+    openSheet(
+      '<div class="sheet-title">选择股票</div>' +
+      '<div class="sheet-desc">还没有选股记录。请先到「选股」标签页添加想跟踪的股票，再回来制定交易计划。</div>' +
+      '<button class="btn-primary" onclick="closeSheet(); tab=\'picks\'; render();">去添加选股</button>'
+    );
+    return;
+  }
+  var list = S.picks.slice().sort(function(a,b){ return b.date.localeCompare(a.date); }).map(function(p){
+    var statusCls = p.status === '买入' ? 'badge-blue' : (p.status === '放弃' ? 'badge-gray' : 'badge-orange');
+    return '<div class="pick-option" onclick="addTradePlan(\'' + p.id + '\')">' +
+      '<div class="item-head">' +
+        '<span class="stock-name">' + esc(p.name || '未命名') + '</span>' +
+        '<span class="badge ' + statusCls + '">' + esc(p.status) + '</span>' +
+      '</div>' +
+      '<div class="date-line">' + esc(p.date) + '</div>' +
+      (p.expect ? '<div class="expect">预期：' + esc(p.expect) + '</div>' : '') +
+    '</div>';
+  }).join('');
+  openSheet(
+    '<div class="sheet-title">从选股中选择</div>' +
+    '<div class="sheet-desc">点击股票添加到交易计划</div>' +
+    list
+  );
+}
+
+window.addTradePlan = function(pickId){
+  var pick = S.picks.find(function(x){ return x.id === pickId; });
+  var p = getPlan(planDate);
+  p.tradePlans.push({
+    id: uid(),
+    pickId: pickId,
+    name: pick ? (pick.name || '') : '',
+    buyPoint: '',
+    sellPoint: '',
+    idea: ''
+  });
+  save();
+  closeSheet();
+  render();
+};
+
+window.delTradePlan = function(i){
+  var p = getPlan(planDate);
+  p.tradePlans.splice(i, 1);
+  save(); render();
+};
+
+window.updateTradePlan = function(i, field, value){
+  var p = getPlan(planDate);
+  if (!p.tradePlans[i]) return;
+  p.tradePlans[i][field] = value;
   saveSoon();
 };
 
@@ -649,7 +725,41 @@ function renderPlanCard(){
         (doneCount === total ? ' · 全部完成' : '') + '</div>'
       : '') +
 
-    '<div class="sub-label" style="margin-top:16px">今日计划外交易</div>' +
+    '<div class="sub-label" style="margin-top:18px">交易计划</div>' +
+    (p.tradePlans.length
+      ? p.tradePlans.map(function(tp, i){
+          var pick = S.picks.find(function(x){ return x.id === tp.pickId; });
+          var stockName = pick ? (pick.name || '未命名') : (tp.name || '已删除');
+          var pickDate = pick ? pick.date : '';
+          return '<div class="trade-plan">' +
+            '<div class="trade-plan-head">' +
+              '<div style="min-width:0">' +
+                '<span class="trade-plan-stock">' + esc(stockName) + '</span>' +
+                (pickDate ? '<span class="trade-plan-pick">' + esc(pickDate) + '</span>' : '') +
+              '</div>' +
+              '<button class="del" onclick="delTradePlan(' + i + ')">✕</button>' +
+            '</div>' +
+            '<div class="tp-row">' +
+              '<label>买点</label>' +
+              '<input value="' + esc(tp.buyPoint) + '" placeholder="如：回踩 5 日线附近" ' +
+                'oninput="updateTradePlan(' + i + ', \'buyPoint\', this.value)">' +
+            '</div>' +
+            '<div class="tp-row">' +
+              '<label>卖点</label>' +
+              '<input value="' + esc(tp.sellPoint) + '" placeholder="如：+5% 或 破前高" ' +
+                'oninput="updateTradePlan(' + i + ', \'sellPoint\', this.value)">' +
+            '</div>' +
+            '<div class="tp-row">' +
+              '<label>思路</label>' +
+              '<textarea placeholder="为什么买？预期怎么走？风险点在哪？" ' +
+                'oninput="updateTradePlan(' + i + ', \'idea\', this.value)">' + esc(tp.idea) + '</textarea>' +
+            '</div>' +
+          '</div>';
+        }).join('')
+      : '<div class="tp-empty">暂无交易计划，从选股中添加</div>') +
+    '<button class="addrow" onclick="openPickSelector()">+ 从选股中添加</button>' +
+
+    '<div class="sub-label" style="margin-top:18px">今日计划外交易</div>' +
     tradeStatus +
   '</div>';
 }
