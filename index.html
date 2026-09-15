@@ -73,6 +73,125 @@ h1{font-size:30px;font-weight:700;letter-spacing:-.6px;margin:0;line-height:1.15
 .link-btn{background:none;border:none;color:var(--accent);font-size:13px;cursor:pointer;padding:4px 8px}
 .link-btn:active{opacity:.6}
 
+/* ===== 主线/副线跟踪 ===== */
+.line-item {
+  padding: 10px 0;
+  border-bottom: .5px solid var(--sep);
+}
+.line-item:last-child { border-bottom: none; }
+.line-item:first-child { padding-top: 4px; }
+
+.line-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.line-badge {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 7px;
+  border-radius: 6px;
+  flex: 0 0 auto;
+  letter-spacing: .3px;
+}
+.line-badge.main {
+  background: rgba(255, 59, 48, 0.14);
+  color: #FF3B30;
+}
+.line-badge.sub {
+  background: rgba(0, 122, 255, 0.14);
+  color: #007AFF;
+}
+.line-name {
+  flex: 1;
+  min-width: 0;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -.1px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.line-pct {
+  flex: 0 0 66px;
+  background: var(--fill);
+  border-radius: 8px;
+  padding: 6px 8px;
+  font-size: 13px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  color: var(--text);
+}
+.line-pct.up { color: var(--up); }
+.line-pct.down { color: var(--down); }
+
+.line-status-row {
+  display: flex;
+  gap: 5px;
+  margin-top: 7px;
+}
+.line-status-btn {
+  flex: 1;
+  border: none;
+  background: var(--fill);
+  color: var(--text2);
+  font-size: 12px;
+  font-weight: 500;
+  padding: 7px 0;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background .15s, color .15s, transform .15s;
+}
+.line-status-btn:active { transform: scale(.95); }
+.line-status-btn.on-up {
+  background: rgba(255, 59, 48, 0.14);
+  color: #FF3B30;
+  font-weight: 600;
+}
+.line-status-btn.on-pullback {
+  background: rgba(255, 149, 0, 0.16);
+  color: #FF9500;
+  font-weight: 600;
+}
+.line-status-btn.on-split {
+  background: rgba(94, 92, 230, 0.14);
+  color: #5E5CE6;
+  font-weight: 600;
+}
+
+.line-note {
+  margin-top: 7px;
+  background: var(--fill);
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-size: 13px;
+  text-align: left;
+  color: var(--text);
+}
+.line-note::placeholder { color: var(--text3); }
+
+.line-edit-item {
+  background: var(--fill);
+  border-radius: 10px;
+  padding: 8px 10px;
+  margin-top: 8px;
+}
+.line-edit-name {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.line-edit-name input {
+  flex: 1;
+  background: var(--card);
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-size: 15px;
+  font-weight: 500;
+  text-align: left;
+}
+
 .mode-card{cursor:pointer}
 .mode-card .mode-extended{
   max-height:0;overflow:hidden;opacity:0;
@@ -441,6 +560,13 @@ var DEFAULT_ENV_OPTIONS = [
   { name:'高潮期', desc:'情绪亢奋，普涨，高标加速。警惕一致性过强后的分歧转折。' }
 ];
 
+/* ===== 主线/副线状态选项 ===== */
+var LINE_STATUS = {
+  up:       { label: '主升', cls: 'on-up' },
+  pullback: { label: '回调', cls: 'on-pullback' },
+  split:    { label: '分歧', cls: 'on-split' }
+};
+
 /* ===== A 股休市日历 ===== */
 var HOLIDAYS = {
   '2025': [
@@ -600,7 +726,6 @@ function aggregateTrades(trades){
 var _aggCache = null;
 var _aggCacheKey = '';
 function aggregateList(trades){
-  // 用交易数组的长度 + 首尾 id 作为缓存 key
   var key = trades.length + ':';
   if (trades.length > 0) {
     key += (trades[0].id || '') + ':' + (trades[trades.length - 1].id || '');
@@ -631,7 +756,6 @@ function migrate(data){
     data.trades.forEach(function(t){ if (t.inPlan === undefined) t.inPlan = true; });
     data.dataVersion = 1;
   }
-  // 兼容老数据：清理已删除的 screenshot 字段（如果存在）
   data.trades.forEach(function(t){
     if (t.screenshot !== undefined) delete t.screenshot;
   });
@@ -646,6 +770,41 @@ function migrate(data){
       return item;
     }).filter(function(item){ return item.name; });
   }
+  // 主线/副线
+  if (!data.lines || typeof data.lines !== 'object') {
+    data.lines = { main: null, subs: [] };
+  } else {
+    if (!Array.isArray(data.lines.subs)) data.lines.subs = [];
+    data.lines.subs = data.lines.subs.filter(function(l){
+      return l && typeof l === 'object' && typeof l.id === 'string' && typeof l.name === 'string';
+    });
+    if (data.lines.main && (typeof data.lines.main !== 'object' || typeof data.lines.main.id !== 'string')) {
+      data.lines.main = null;
+    }
+  }
+  // 每日 linePerfs：清理已删除的 hasPullback 字段，规范结构
+  Object.keys(data.reviews).forEach(function(d){
+    var r = data.reviews[d];
+    if (r && typeof r === 'object') {
+      if (!r.linePerfs || typeof r.linePerfs !== 'object' || Array.isArray(r.linePerfs)) {
+        r.linePerfs = {};
+      } else {
+        Object.keys(r.linePerfs).forEach(function(lid){
+          var p = r.linePerfs[lid];
+          if (!p || typeof p !== 'object') {
+            r.linePerfs[lid] = { changePct: '', status: '', note: '' };
+          } else {
+            if (typeof p.changePct !== 'string') p.changePct = '';
+            if (typeof p.status !== 'string') p.status = '';
+            if (typeof p.note !== 'string') p.note = '';
+            // 老字段兼容：hasPullback 为 true 时，把 status 视为 pullback
+            if (p.hasPullback === true && !p.status) p.status = 'pullback';
+            delete p.hasPullback;
+          }
+        });
+      }
+    }
+  });
   data.dataVersion = CURRENT_VERSION;
   return data;
 }
@@ -708,6 +867,7 @@ function freshState(){
   return {
     dataVersion: CURRENT_VERSION,
     envOptions: JSON.parse(JSON.stringify(DEFAULT_ENV_OPTIONS)),
+    lines: { main: null, subs: [] },
     reviews:{}, picks:[], trades:[], plans:{},
     modes:[
       { id:uid(), name:'打板', envs:['发酵期','高潮期'],
@@ -740,7 +900,7 @@ function loadState(){
 function save(){
   try {
     localStorage.setItem(KEY, JSON.stringify(S));
-    clearAggCache();  // 数据变了，清空聚合缓存
+    clearAggCache();
     var status = getStorageStatus();
     if (status.level === 'danger') showSaveHint('⚠ 存储空间不足，请尽快导出备份', true, 4000);
     return true;
@@ -760,7 +920,6 @@ function saveSoon(){
   clearTimeout(saveTimer);
   saveTimer = setTimeout(function(){
     var ok = save();
-    // 只要保存成功就反馈（容量告警另由 save 内部处理）
     if (ok) flashSaved();
   }, 300);
 }
@@ -776,7 +935,6 @@ function showSaveHint(text, isError, duration){
   hintTimer = setTimeout(function(){ h.classList.remove('show'); }, duration || 900);
 }
 
-/* 页面隐藏时强制保存，避免切后台丢数据 */
 document.addEventListener('visibilitychange', function(){
   if (document.hidden) {
     clearTimeout(saveTimer);
@@ -816,6 +974,7 @@ function getReview(d){
   if (!r.firstBoard || typeof r.firstBoard !== 'object') r.firstBoard = { count:'', theme:'' };
   if (r.firstBoard.count === undefined) r.firstBoard.count = '';
   if (r.firstBoard.theme === undefined) r.firstBoard.theme = '';
+  if (!r.linePerfs || typeof r.linePerfs !== 'object' || Array.isArray(r.linePerfs)) r.linePerfs = {};
   return r;
 }
 function setByPath(obj, path, val){
@@ -851,6 +1010,164 @@ function ladderRow(x, i){
     '<button class="del" onclick="delArr(\'ladders\',' + i + ')">✕</button>' +
   '</div>';
 }
+
+/* 主线/副线卡片 */
+function renderLinesCard(){
+  var lines = S.lines || { main: null, subs: [] };
+  var r = getReview(curDate);
+  var html = '';
+  if (lines.main) html += renderLineItem(lines.main, 'main', r);
+  (lines.subs || []).forEach(function(line){
+    html += renderLineItem(line, 'sub', r);
+  });
+  var isEmpty = !lines.main && (!lines.subs || !lines.subs.length);
+
+  return '<div class="card">' +
+    '<div class="card-title-row">' +
+      '<div class="card-title">主线 / 副线跟踪</div>' +
+      '<button class="link-btn" onclick="openLineManager()">管理</button>' +
+    '</div>' +
+    (isEmpty
+      ? '<div class="hint">还没有配置主线和副线，点击右上角「管理」添加</div>'
+      : html) +
+  '</div>';
+}
+function renderLineItem(line, type, r){
+  var perf = (r.linePerfs && r.linePerfs[line.id]) || { changePct: '', status: '', note: '' };
+  var pct = num(perf.changePct);
+  var pctCls = pct === null ? '' : (pct >= 0 ? 'up' : 'down');
+  var badgeCls = type === 'main' ? 'main' : 'sub';
+  var badgeText = type === 'main' ? '主线' : '副线';
+
+  // 状态选择按钮
+  var statusHtml = '<div class="line-status-row">';
+  Object.keys(LINE_STATUS).forEach(function(key){
+    var s = LINE_STATUS[key];
+    var isOn = (perf.status === key);
+    statusHtml += '<button class="line-status-btn' + (isOn ? ' ' + s.cls : '') + '" ' +
+      'onclick="setLineStatus(\'' + line.id + '\', \'' + key + '\')">' + s.label + '</button>';
+  });
+  statusHtml += '</div>';
+
+  return '<div class="line-item">' +
+    '<div class="line-head">' +
+      '<span class="line-badge ' + badgeCls + '">' + badgeText + '</span>' +
+      '<span class="line-name">' + esc(line.name) + '</span>' +
+      '<input class="line-pct ' + pctCls + '" value="' + esc(perf.changePct) + '" placeholder="%" inputmode="decimal" ' +
+        'oninput="updateLinePerf(\'' + line.id + '\', \'changePct\', this.value)">' +
+    '</div>' +
+    statusHtml +
+    '<input class="line-note" value="' + esc(perf.note) + '" placeholder="表现 / 回调位置 / 观察点…" ' +
+      'oninput="updateLinePerf(\'' + line.id + '\', \'note\', this.value)">' +
+  '</div>';
+}
+
+window.updateLinePerf = function(lineId, field, value){
+  var r = getReview(curDate);
+  if (!r.linePerfs) r.linePerfs = {};
+  if (!r.linePerfs[lineId]) r.linePerfs[lineId] = { changePct: '', status: '', note: '' };
+  r.linePerfs[lineId][field] = value;
+  saveSoon();
+};
+window.setLineStatus = function(lineId, status){
+  var r = getReview(curDate);
+  if (!r.linePerfs) r.linePerfs = {};
+  if (!r.linePerfs[lineId]) r.linePerfs[lineId] = { changePct: '', status: '', note: '' };
+  // 再点一次相同状态 → 取消
+  r.linePerfs[lineId].status = (r.linePerfs[lineId].status === status) ? '' : status;
+  save();
+  render();
+};
+
+/* 管理面板 */
+window.openLineManager = function(){
+  if (!S.lines) S.lines = { main: null, subs: [] };
+  var lines = S.lines;
+  var mainHtml = lines.main
+    ? '<div class="line-edit-item">' +
+        '<div class="line-edit-name">' +
+          '<input value="' + esc(lines.main.name) + '" placeholder="主线名称" oninput="updateLineName(\'main\', this.value)">' +
+          '<button class="del" onclick="clearMainLine()">✕</button>' +
+        '</div>' +
+      '</div>'
+    : '<div class="hint">未设置主线</div>';
+
+  var subsHtml = (lines.subs || []).length
+    ? lines.subs.map(function(l, i){
+        return '<div class="line-edit-item">' +
+          '<div class="line-edit-name">' +
+            '<input value="' + esc(l.name) + '" placeholder="副线名称" oninput="updateSubLineName(' + i + ', this.value)">' +
+            '<button class="del" onclick="delSubLine(' + i + ')">✕</button>' +
+          '</div>' +
+        '</div>';
+      }).join('')
+    : '<div class="hint">未设置副线</div>';
+
+  openSheet(
+    '<div class="sheet-title">管理主线 / 副线</div>' +
+    '<div class="sheet-desc">主线只保留一个，副线可以有多个。每天到复盘里记录它们当天的表现、当前状态（主升 / 回调 / 分歧），方便发现回调机会。</div>' +
+    '<div class="sub-label" style="margin-top:14px">主线</div>' +
+    mainHtml +
+    (lines.main ? '' : '<button class="addrow" onclick="setMainLine()">+ 设置主线</button>') +
+    '<div class="sub-label">副线</div>' +
+    subsHtml +
+    '<div class="line-edit-item" style="background:transparent;padding:8px 0;margin-top:8px">' +
+      '<div class="line-edit-name">' +
+        '<input id="new-sub-line" placeholder="如：机器人">' +
+        '<button class="del" style="background:var(--accent);color:#fff;flex:0 0 34px;width:34px;height:34px" onclick="addSubLine()">+</button>' +
+      '</div>' +
+    '</div>' +
+    '<button class="btn-primary" onclick="closeSheet()">完成</button>'
+  );
+};
+window.updateLineName = function(type, v){
+  if (!S.lines || !S.lines.main) return;
+  S.lines.main.name = v;
+  saveSoon();
+};
+window.updateSubLineName = function(i, v){
+  if (!S.lines || !S.lines.subs[i]) return;
+  S.lines.subs[i].name = v;
+  saveSoon();
+};
+window.setMainLine = function(){
+  if (!S.lines) S.lines = { main: null, subs: [] };
+  if (S.lines.main) return;
+  S.lines.main = { id: 'line_' + uid(), name: '' };
+  save();
+  openLineManager();
+  render();
+};
+window.clearMainLine = function(){
+  if (!confirm('清除主线？历史每日表现记录会保留，可以随时重新设置。')) return;
+  S.lines.main = null;
+  save();
+  openLineManager();
+  render();
+};
+window.addSubLine = function(){
+  var input = $('#new-sub-line');
+  if (!input) return;
+  var name = input.value.trim();
+  if (!name) { alert('请填写副线名称'); return; }
+  if (!S.lines) S.lines = { main: null, subs: [] };
+  if (!Array.isArray(S.lines.subs)) S.lines.subs = [];
+  if (S.lines.subs.some(function(l){ return l.name === name; })) { alert('已存在同名副线'); return; }
+  S.lines.subs.push({ id: 'line_' + uid(), name: name });
+  save();
+  openLineManager();
+  render();
+};
+window.delSubLine = function(i){
+  if (!S.lines || !S.lines.subs[i]) return;
+  var name = S.lines.subs[i].name;
+  if (!confirm('删除副线「' + name + '」？历史每日表现记录会保留。')) return;
+  S.lines.subs.splice(i, 1);
+  save();
+  openLineManager();
+  render();
+};
+
 function renderReview(){
   var r = getReview(curDate);
   var curEnv = findEnvObj(r.marketEnv);
@@ -867,6 +1184,7 @@ function renderReview(){
     '<div class="row"><label>近期支撑位</label><input data-scope="r" data-k="support" value="' + esc(r.support) + '" placeholder="3050"></div>' +
     '<div class="row"><label>近期压力位</label><input data-scope="r" data-k="resistance" value="' + esc(r.resistance) + '" placeholder="3200"></div>' +
   '</div>' +
+  renderLinesCard() +
   '<div class="card">' +
     '<div class="card-title">板块复盘</div>' +
     '<div class="sub-label up">涨幅居前</div>' +
@@ -1112,7 +1430,6 @@ function drawPickSheet(){
 }
 
 /* ===== 每日计划 ===== */
-/* 计划日期：从 localStorage 读取，方便刷新后回到上次编辑的那天 */
 var planDate = (function(){
   try {
     var saved = localStorage.getItem(PLAN_DATE_KEY);
@@ -1123,7 +1440,6 @@ var planDate = (function(){
 function savePlanDate(){
   try { localStorage.setItem(PLAN_DATE_KEY, planDate); } catch(e){}
 }
-
 function getPlan(d){
   if (!S.plans[d]) S.plans[d] = { items: [], tradePlans: [] };
   var p = S.plans[d];
@@ -1543,7 +1859,6 @@ window.openTradeSheet = function(id){
   drawTradeSheet();
 };
 
-/* 计算某笔交易「卖出时的当前可卖数量」 */
 function calcAvailableQty(tradeId, name, date){
   if (!name) return null;
   var priorTrades = S.trades.filter(function(x){
@@ -1641,7 +1956,6 @@ function drawTradeSheet(){
     function upd(){
       if (target === 'draft') {
         tradeDraft[key] = el.value;
-        // 名称或日期变化时，更新可卖提示
         if ((key === 'name' || key === 'date') && tradeDraft._dir === 'sell') {
           var availEl = $('#t-avail');
           if (availEl) {
@@ -1832,16 +2146,13 @@ function smoothPath(pts){
   return d;
 }
 
-/* 增强资金曲线：叠加峰值线与回撤阴影 */
 function sparklineBig(curve){
   if (!curve || curve.length < 2) return '<div class="chart-empty">暂无资金曲线</div>';
   var W = 320, H = 90, P = 10;
   var min = Math.min.apply(null, curve);
   var max = Math.max.apply(null, curve);
-  // 让零线始终可见
   if (min > 0) min = 0;
   if (max < 0) max = 0;
-  // 避免 range 为 0
   var range = (max - min) || 1;
 
   var pts = curve.map(function(v, i){
@@ -1859,7 +2170,6 @@ function sparklineBig(curve){
 
   var line = smoothPath(pts);
   var peakLine = smoothPath(peakPts);
-  // 回撤阴影
   var ddArea = peakLine + ' L' + pts[pts.length-1].x.toFixed(2) + ',' + pts[pts.length-1].y.toFixed(2);
   for (var i = pts.length - 2; i >= 0; i--) {
     ddArea += ' L' + pts[i].x.toFixed(2) + ',' + pts[i].y.toFixed(2);
@@ -1897,7 +2207,6 @@ function sparklineBig(curve){
   '</svg>';
 }
 
-/* 胜率趋势 */
 function winRateTrend(closedGroups, windowSize){
   if (!closedGroups || closedGroups.length < 2) return '<div class="chart-empty">需要至少 2 只已清仓股票</div>';
   windowSize = windowSize || Math.max(3, Math.min(10, Math.ceil(closedGroups.length / 3)));
